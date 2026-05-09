@@ -1,0 +1,9 @@
+.next
+.script-dist
+.test-dist
+node_modules
+.env
+*.db
+*.db-journal
+coverage
+dist

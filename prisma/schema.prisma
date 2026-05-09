@@ -1,0 +1,110 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Source {
+  id            String    @id @default(cuid())
+  name          String
+  type          String
+  url           String
+  enabled       Boolean   @default(true)
+  lastFetchedAt DateTime?
+  status        String    @default("idle")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  rawItems      RawItem[]
+
+  @@unique([name, url])
+}
+
+model RawItem {
+  id          String   @id @default(cuid())
+  sourceId    String
+  title       String
+  url         String
+  summary     String?
+  rank        Int?
+  hotValue    Int?
+  publishedAt DateTime?
+  fetchedAt   DateTime @default(now())
+  rawJson      String?
+  source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, fetchedAt])
+  @@index([publishedAt])
+}
+
+model Keyword {
+  id             String              @id @default(cuid())
+  word           String
+  normalizedWord String              @unique
+  category       String
+  score          Float               @default(0)
+  trend          String              @default("stable")
+  sentiment      String              @default("neutral")
+  firstSeenAt    DateTime
+  lastSeenAt     DateTime
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  snapshots      KeywordSnapshot[]
+  relationsA     KeywordRelation[]   @relation("KeywordRelationA")
+  relationsB     KeywordRelation[]   @relation("KeywordRelationB")
+
+  @@index([score])
+  @@index([category])
+  @@index([lastSeenAt])
+}
+
+model KeywordSnapshot {
+  id           String   @id @default(cuid())
+  keywordId    String
+  score        Float
+  rank         Int
+  sourceCount  Int
+  itemCount    Int
+  snapshotTime DateTime @default(now())
+  keyword      Keyword  @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+
+  @@index([keywordId, snapshotTime])
+}
+
+model KeywordRelation {
+  id           String  @id @default(cuid())
+  keywordAId   String
+  keywordBId   String
+  weight       Float
+  relationType String  @default("co_occurrence")
+  keywordA     Keyword @relation("KeywordRelationA", fields: [keywordAId], references: [id], onDelete: Cascade)
+  keywordB     Keyword @relation("KeywordRelationB", fields: [keywordBId], references: [id], onDelete: Cascade)
+
+  @@unique([keywordAId, keywordBId, relationType])
+  @@index([weight])
+}
+
+model DailyReport {
+  id              String   @id @default(cuid())
+  date            String   @unique
+  title           String
+  summary         String
+  contentMarkdown String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model FetchLog {
+  id           String   @id @default(cuid())
+  startedAt    DateTime @default(now())
+  finishedAt   DateTime?
+  status       String
+  successCount Int      @default(0)
+  failureCount Int      @default(0)
+  durationMs   Int      @default(0)
+  message      String?
+  error        String?
+}

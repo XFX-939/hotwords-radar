@@ -55,7 +55,12 @@ export default function HomePage() {
   );
 
   const rising = useMemo(
-    () => (keywords.data ?? []).filter((item) => item.trend === "rising" || item.trend === "up").slice(0, 10),
+    () => {
+      const items = keywords.data ?? [];
+      const movingUp = items.filter((item) => item.trend === "rising" || item.trend === "up");
+      const newSignals = items.filter((item) => item.trend === "new");
+      return (movingUp.length ? movingUp : newSignals.length ? newSignals : items).slice(0, 10);
+    },
     [keywords.data]
   );
   const categoryCards = useMemo(() => {

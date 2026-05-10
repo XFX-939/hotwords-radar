@@ -62,7 +62,7 @@ export default function SourcesPage() {
       if (!response.ok) throw new Error(json.error ?? "刷新失败");
       setRefreshTone("success");
       setRefreshMessage(
-        `刷新完成：成功 ${json.data.successCount} 个源，失败 ${json.data.failureCount} 个源，新增 ${json.data.insertedRawItemCount} 条内容`
+        `刷新完成：更新 ${json.data.successCount} 个公开源，新增 ${json.data.insertedRawItemCount} 条内容`
       );
       await sources.refetch();
     } catch (error) {

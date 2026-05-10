@@ -77,13 +77,27 @@ export async function getKeywordList(query: KeywordQuery = {}): Promise<KeywordL
 export async function getSources(localeParam?: string | null) {
   const prisma = getPrisma();
   const locale = normalizeLocale(localeParam);
-  const sourceWhere = locale === "all" ? {} : { locale };
+  const sourceLocaleWhere = locale === "all" ? {} : { locale };
+  const visibleSourceWhere = {
+    ...sourceLocaleWhere,
+    enabled: true,
+    lastStatus: { not: "failed" }
+  };
   const rawItemWhere = locale === "all" ? {} : { source: { is: { locale } } };
   const [sources, allSources, logs, rawItemCount, keywordCount] = await Promise.all([
-    prisma.source.findMany({ where: sourceWhere, orderBy: [{ enabled: "desc" }, { name: "asc" }] }),
-    prisma.source.findMany({ select: { enabled: true, locale: true } }),
+    prisma.source.findMany({ where: visibleSourceWhere, orderBy: [{ sourceWeight: "desc" }, { name: "asc" }] }),
+    prisma.source.findMany({ select: { enabled: true, locale: true, lastStatus: true } }),
     prisma.fetchLog.findMany({
-      where: locale === "all" ? {} : { source: { is: { locale } } },
+      where: {
+        status: { not: "failed" },
+        source: {
+          is: {
+            ...sourceLocaleWhere,
+            enabled: true,
+            lastStatus: { not: "failed" }
+          }
+        }
+      },
       include: { source: true },
       orderBy: { startedAt: "desc" },
       take: 12
@@ -99,8 +113,8 @@ export async function getSources(localeParam?: string | null) {
   return {
     stats: {
       enabledSourceCount: sources.filter((source) => source.enabled).length,
-      enabledZhSourceCount: allSources.filter((source) => source.enabled && source.locale === "zh").length,
-      enabledEnSourceCount: allSources.filter((source) => source.enabled && source.locale === "en").length,
+      enabledZhSourceCount: allSources.filter((source) => source.enabled && source.locale === "zh" && source.lastStatus !== "failed").length,
+      enabledEnSourceCount: allSources.filter((source) => source.enabled && source.locale === "en" && source.lastStatus !== "failed").length,
       rawItemCount,
       keywordCount,
       lastFetchedAt: lastFetchedAt?.toISOString() ?? null,
@@ -328,10 +342,10 @@ function getRangeStart(range: TimeRange) {
 }
 
 function sortKeywords(items: KeywordListItem[], sort = "heat") {
-  const trendScore: Record<string, number> = { rising: 4, up: 3, stable: 2, down: 1 };
+  const trendScore: Record<string, number> = { rising: 5, new: 4, up: 3, stable: 2, down: 1, falling: 0 };
   const copy = [...items];
   if (sort === "growth") {
-    return copy.sort((a, b) => trendScore[b.trend] - trendScore[a.trend] || b.score - a.score);
+    return copy.sort((a, b) => (trendScore[b.trend] ?? 0) - (trendScore[a.trend] ?? 0) || b.score - a.score);
   }
   if (sort === "appeared") {
     return copy.sort((a, b) => Date.parse(b.firstSeenAt) - Date.parse(a.firstSeenAt));

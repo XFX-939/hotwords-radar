@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { TrendChart } from "@/components/charts";
 import { EmptyState, ErrorState, KeywordLink, Metric, Panel, SectionTitle, SkeletonBlock, TrendBadge } from "@/components/ui";
 import { formatChineseTime, formatScore, sentimentText } from "@/lib/format";
+import type { SourceLocale } from "@/lib/types";
 import { useApi } from "@/hooks/use-api";
 
 interface KeywordDetail {
@@ -30,11 +31,12 @@ interface KeywordDetail {
     id: string;
     sourceName: string;
     sourceType: string;
+    sourceLocale: string;
     title: string;
-    url: string;
+    url: string | null;
     summary: string | null;
-    rank: number | null;
-    hotValue: number | null;
+    author: string | null;
+    weight: number;
     publishedAt: string | null;
     fetchedAt: string;
   }>;
@@ -42,10 +44,12 @@ interface KeywordDetail {
 
 export default function KeywordDetailPage() {
   const params = useParams<{ keyword: string }>();
+  const searchParams = useSearchParams();
   const keyword = params.keyword;
-  const detail = useApi<KeywordDetail>(keyword ? `/api/keywords/${keyword}` : null);
+  const locale = normalizeLocale(searchParams.get("locale"));
+  const detail = useApi<KeywordDetail>(keyword ? `/api/keywords/${keyword}?locale=${locale}` : null);
   const trend = useApi<Array<{ time: string; score: number; rank: number; sourceCount: number; itemCount: number }>>(
-    keyword ? `/api/keywords/${keyword}/trend` : null
+    keyword ? `/api/keywords/${keyword}/trend?locale=${locale}` : null
   );
 
   if (detail.loading) {
@@ -70,7 +74,7 @@ export default function KeywordDetailPage() {
               首页
             </Link>
             <span>/</span>
-            <Link href="/trending" className="link-primary">
+            <Link href={`/trending?locale=${locale}`} className="link-primary">
               热点榜
             </Link>
           </div>
@@ -84,7 +88,7 @@ export default function KeywordDetailPage() {
       </div>
 
       <section className="grid gap-4 md:grid-cols-4">
-        <Metric label="当前热度分" value={formatScore(detail.data.score)} />
+        <Metric label="综合热度分" value={formatScore(detail.data.score)} />
         <Metric label="当前排名" value={`#${detail.data.rank}`} />
         <Metric label="分类" value={detail.data.category} />
         <Metric label="情绪" value={sentimentText(detail.data.sentiment)} hint={detail.data.sentimentAnalysis.label} />
@@ -126,7 +130,7 @@ export default function KeywordDetailPage() {
           <div className="flex flex-wrap gap-2">
             {detail.data.relatedKeywords.length ? (
               detail.data.relatedKeywords.map((word) => (
-                <KeywordLink key={word} word={word}>
+                <KeywordLink key={word} word={word} locale={locale}>
                   <span className="btn-secondary inline-flex rounded-md px-3 py-1.5 text-sm">
                     {word}
                   </span>
@@ -156,26 +160,32 @@ export default function KeywordDetailPage() {
           {detail.data.sources.map((source) => (
             <a
               key={source.id}
-              href={source.url}
+              href={source.url ?? "#"}
               target="_blank"
               rel="noreferrer"
               className="row-surface rounded-lg p-4 transition"
             >
               <div className="mb-3 flex items-center justify-between gap-3">
                 <span className="status-neutral rounded-md border px-2 py-1 text-xs">
-                  {source.sourceName} · {source.sourceType}
+                  {source.sourceName} · {source.sourceLocale === "zh" ? "中文源" : "英文源"} · {source.sourceType}
                 </span>
                 <ExternalLink size={15} className="text-[color:var(--muted-soft)]" />
               </div>
               <h2 className="text-primary line-clamp-2 font-medium">{source.title}</h2>
               <p className="text-secondary mt-2 line-clamp-2 text-sm leading-6">{source.summary}</p>
               <p className="text-muted mt-3 text-xs">
-                排名 {source.rank ?? "-"} · 热度 {source.hotValue ?? "-"} · {formatChineseTime(source.publishedAt)}
+                {source.author ?? "公开来源"} · 关联权重 {source.weight.toFixed(1)} · {formatChineseTime(source.publishedAt)}
               </p>
             </a>
           ))}
+          {detail.data.sources.length === 0 ? <EmptyState title="暂无真实来源" /> : null}
         </div>
       </Panel>
     </div>
   );
+}
+
+function normalizeLocale(value?: string | null): SourceLocale {
+  if (value === "zh" || value === "en") return value;
+  return "all";
 }

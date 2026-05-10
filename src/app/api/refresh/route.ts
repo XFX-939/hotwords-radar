@@ -1,5 +1,7 @@
 import { fail, ok } from "@/lib/http";
-import { runRefreshPipeline } from "@/lib/refresh";
+import { runHotwordsIngestion } from "@/lib/ingestion/run";
+
+export const runtime = "nodejs";
 
 export async function POST() {
   try {
@@ -7,7 +9,7 @@ export async function POST() {
       return fail(new Error("手动刷新仅在开发模式或显式开启后可用"), 403);
     }
 
-    const result = await runRefreshPipeline({ trigger: "manual-api" });
+    const result = await runHotwordsIngestion({ trigger: "legacy-refresh-api" });
     return ok(result);
   } catch (error) {
     return fail(error);

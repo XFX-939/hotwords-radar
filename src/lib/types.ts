@@ -18,11 +18,17 @@ export const CATEGORIES = [
   "教育"
 ] as const;
 
-export const SOURCE_TYPES = ["热搜榜", "资讯流", "社区讨论", "创作平台"] as const;
+export const SOURCE_TYPES = ["rss", "newsapi", "gdelt", "github_api"] as const;
+export const SOURCE_LOCALES = [
+  { label: "全部来源", value: "all" },
+  { label: "中文信息源", value: "zh" },
+  { label: "英文信息源", value: "en" }
+] as const;
 
 export type TimeRange = (typeof TIME_RANGES)[number]["value"];
 export type Category = (typeof CATEGORIES)[number];
-export type TrendDirection = "rising" | "up" | "stable" | "down";
+export type SourceLocale = (typeof SOURCE_LOCALES)[number]["value"];
+export type TrendDirection = "rising" | "up" | "stable" | "down" | "new" | "falling";
 export type Sentiment = "positive" | "neutral" | "negative" | "mixed";
 
 export interface KeywordSignal {
@@ -33,8 +39,9 @@ export interface KeywordSignal {
 
 export interface HotScoreInput {
   frequency: number;
-  bestRank: number;
+  sourceWeight: number;
   sourceCount: number;
+  itemCount: number;
   latestSeenAt: Date;
 }
 
@@ -60,6 +67,7 @@ export interface KeywordListItem {
   score: number;
   trend: TrendDirection;
   sentiment: Sentiment;
+  locale: SourceLocale;
   sourceCount: number;
   itemCount: number;
   firstSeenAt: string;
@@ -73,5 +81,44 @@ export interface RefreshResult {
   keywordCount: number;
   relationCount: number;
   durationMs: number;
-  status: "success" | "failed";
+  status: "success" | "partial_success" | "failed";
+}
+
+export interface DataStats {
+  enabledSourceCount: number;
+  enabledZhSourceCount: number;
+  enabledEnSourceCount: number;
+  rawItemCount: number;
+  keywordCount: number;
+  lastFetchedAt: string | null;
+  hasRealData: boolean;
+  fallbackMode: boolean;
+}
+
+export interface IngestionSourceResult {
+  sourceKey: string;
+  sourceName: string;
+  status: "success" | "empty" | "failed" | "skipped";
+  fetched: number;
+  inserted: number;
+  error: string | null;
+}
+
+export interface IngestionResult {
+  status: "success" | "partial_success" | "failed";
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  sourceCount: number;
+  successCount: number;
+  failureCount: number;
+  insertedRawItemCount: number;
+  updatedKeywordCount: number;
+  snapshotCount: number;
+  sources: IngestionSourceResult[];
+  keywords: {
+    created: number;
+    updated: number;
+    snapshots: number;
+  };
 }

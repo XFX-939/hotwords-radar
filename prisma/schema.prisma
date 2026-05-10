@@ -9,56 +9,86 @@ datasource db {
 }
 
 model Source {
-  id            String    @id @default(cuid())
-  name          String
-  type          String
-  url           String
-  enabled       Boolean   @default(true)
-  lastFetchedAt DateTime?
-  status        String    @default("idle")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  rawItems      RawItem[]
-
-  @@unique([name, url])
+  id                   String           @id @default(cuid())
+  key                  String           @unique
+  name                 String
+  type                 String
+  endpoint             String
+  locale               String           @default("en")
+  enabled              Boolean          @default(true)
+  sourceWeight         Float            @default(1)
+  fetchIntervalMinutes Int              @default(180)
+  lastFetchedAt        DateTime?
+  lastStatus           String           @default("idle")
+  lastError            String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  rawItems             RawItem[]
+  mentions             KeywordMention[]
+  fetchLogs            FetchLog[]
 }
 
 model RawItem {
-  id          String   @id @default(cuid())
+  id          String           @id @default(cuid())
   sourceId    String
+  externalId  String?
   title       String
-  url         String
+  url         String?
   summary     String?
-  rank        Int?
-  hotValue    Int?
+  author      String?
   publishedAt DateTime?
-  fetchedAt   DateTime @default(now())
-  rawJson      String?
-  source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  fetchedAt   DateTime         @default(now())
+  rawJson     String?
+  contentHash String
+  createdAt   DateTime         @default(now())
+  source      Source           @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  mentions    KeywordMention[]
 
+  @@unique([sourceId, externalId])
+  @@unique([sourceId, contentHash])
   @@index([sourceId, fetchedAt])
   @@index([publishedAt])
 }
 
 model Keyword {
-  id             String              @id @default(cuid())
+  id             String            @id @default(cuid())
   word           String
-  normalizedWord String              @unique
+  normalizedWord String
   category       String
-  score          Float               @default(0)
-  trend          String              @default("stable")
-  sentiment      String              @default("neutral")
+  score          Float             @default(0)
+  trend          String            @default("stable")
+  sentiment      String            @default("neutral")
+  locale         String            @default("all")
   firstSeenAt    DateTime
   lastSeenAt     DateTime
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
   snapshots      KeywordSnapshot[]
-  relationsA     KeywordRelation[]   @relation("KeywordRelationA")
-  relationsB     KeywordRelation[]   @relation("KeywordRelationB")
+  mentions       KeywordMention[]
+  relationsA     KeywordRelation[] @relation("KeywordRelationA")
+  relationsB     KeywordRelation[] @relation("KeywordRelationB")
 
   @@index([score])
   @@index([category])
+  @@index([locale, score])
   @@index([lastSeenAt])
+  @@unique([normalizedWord, locale])
+}
+
+model KeywordMention {
+  id        String   @id @default(cuid())
+  keywordId String
+  rawItemId String
+  sourceId  String
+  weight    Float
+  createdAt DateTime @default(now())
+  keyword   Keyword  @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+  rawItem   RawItem  @relation(fields: [rawItemId], references: [id], onDelete: Cascade)
+  source    Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([keywordId, rawItemId])
+  @@index([rawItemId])
+  @@index([sourceId])
 }
 
 model KeywordSnapshot {
@@ -89,22 +119,28 @@ model KeywordRelation {
 
 model DailyReport {
   id              String   @id @default(cuid())
-  date            String   @unique
+  date            String
   title           String
   summary         String
   contentMarkdown String
+  locale          String   @default("all")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@unique([date, locale])
 }
 
 model FetchLog {
-  id           String   @id @default(cuid())
-  startedAt    DateTime @default(now())
-  finishedAt   DateTime?
+  id           String    @id @default(cuid())
+  sourceId     String
   status       String
-  successCount Int      @default(0)
-  failureCount Int      @default(0)
-  durationMs   Int      @default(0)
-  message      String?
-  error        String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  durationMs   Int       @default(0)
+  itemCount    Int       @default(0)
+  newItemCount Int       @default(0)
+  errorMessage String?
+  source       Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, startedAt])
 }

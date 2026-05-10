@@ -23,7 +23,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   async function refreshData() {
     setRefreshing(true);
     try {
-      await fetch("/api/refresh", { method: "POST" });
+      await fetch("/api/jobs/ingest-hotwords", { method: "POST" });
       router.refresh();
       window.dispatchEvent(new CustomEvent("hotwords:refresh"));
     } finally {
@@ -100,7 +100,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="radar-grid mx-auto min-h-screen max-w-7xl px-4 pb-12 pt-24 sm:px-6 md:pt-24">
         <div className="text-muted mb-6 flex flex-wrap items-center gap-2 text-xs">
           <Activity size={14} />
-          <span>Mock pipeline 已接入数据库，AI 分析接口预留中</span>
+          <span>合规公开数据源聚合系统 · 综合热度分不代表全网真实热度</span>
         </div>
         {children}
       </main>

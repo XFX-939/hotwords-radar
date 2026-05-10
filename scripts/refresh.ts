@@ -1,8 +1,8 @@
-import { runRefreshPipeline } from "../src/lib/refresh";
 import { disconnectPrisma } from "../src/lib/db";
+import { runHotwordsIngestion } from "../src/lib/ingestion/run";
 
 async function main() {
-  const result = await runRefreshPipeline({ trigger: "manual-script" });
+  const result = await runHotwordsIngestion({ trigger: "manual-script" });
   console.log(JSON.stringify(result, null, 2));
 }
 

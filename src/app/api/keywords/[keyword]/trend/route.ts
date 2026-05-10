@@ -5,10 +5,11 @@ interface RouteContext {
   params: Promise<{ keyword: string }>;
 }
 
-export async function GET(_: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
     const { keyword } = await context.params;
-    return ok(await getKeywordTrend(keyword));
+    const { searchParams } = new URL(request.url);
+    return ok(await getKeywordTrend(keyword, searchParams.get("locale")));
   } catch (error) {
     return fail(error);
   }

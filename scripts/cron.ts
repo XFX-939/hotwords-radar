@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { runRefreshPipeline } from "../src/lib/refresh";
+import { runHotwordsIngestion } from "../src/lib/ingestion/run";
 
 const schedule = "0 9,15,20 * * *";
 const lunchSchedule = "30 11 * * *";
@@ -12,7 +12,7 @@ for (const expression of [schedule, lunchSchedule]) {
     expression,
     async () => {
       try {
-        const result = await runRefreshPipeline({ trigger: "node-cron" });
+        const result = await runHotwordsIngestion({ trigger: "node-cron" });
         console.log(`[cron] refresh ok`, result);
       } catch (error) {
         console.error("[cron] refresh failed", error);

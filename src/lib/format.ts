@@ -26,20 +26,24 @@ export function formatScore(score: number) {
 
 export function trendText(trend: TrendDirection | string) {
   const labels: Record<string, string> = {
+    new: "新出现",
     rising: "飙升",
     up: "上升",
     stable: "平稳",
-    down: "回落"
+    down: "回落",
+    falling: "快速回落"
   };
   return labels[trend] ?? "平稳";
 }
 
 export function trendClass(trend: TrendDirection | string) {
   const classes: Record<string, string> = {
+    new: "status-success",
     rising: "status-hot",
     up: "status-success",
     stable: "status-neutral",
-    down: "status-risk"
+    down: "status-risk",
+    falling: "status-risk"
   };
   return classes[trend] ?? classes.stable;
 }

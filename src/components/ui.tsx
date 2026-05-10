@@ -71,9 +71,9 @@ export function TrendBadge({ trend }: { trend: string }) {
   return <span className={`inline-flex rounded-md border px-2 py-1 text-xs ${trendClass(trend)}`}>{trendText(trend)}</span>;
 }
 
-export function KeywordLink({ word, children }: { word: string; children?: React.ReactNode }) {
+export function KeywordLink({ word, locale = "all", children }: { word: string; locale?: string; children?: React.ReactNode }) {
   return (
-    <Link href={`/word/${encodeURIComponent(word)}`} className="link-primary font-medium">
+    <Link href={`/word/${encodeURIComponent(word)}?locale=${locale}`} className="link-primary font-medium">
       {children ?? word}
     </Link>
   );

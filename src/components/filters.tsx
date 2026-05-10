@@ -1,31 +1,36 @@
 "use client";
 
-import { CATEGORIES, TIME_RANGES } from "@/lib/types";
+import { CATEGORIES, SOURCE_LOCALES, TIME_RANGES } from "@/lib/types";
 
 interface SourceOption {
   id: string;
   name: string;
+  locale?: string;
 }
 
 export function FilterBar({
+  locale = "all",
   range,
   category,
   source,
   sort,
   search,
   sources = [],
+  onLocale,
   onRange,
   onCategory,
   onSource,
   onSort,
   onSearch
 }: {
+  locale?: string;
   range?: string;
   category?: string;
   source?: string;
   sort?: string;
   search?: string;
   sources?: SourceOption[];
+  onLocale?: (value: string) => void;
   onRange?: (value: string) => void;
   onCategory?: (value: string) => void;
   onSource?: (value: string) => void;
@@ -34,18 +39,33 @@ export function FilterBar({
 }) {
   return (
     <div className="glass-panel mb-5 flex flex-col gap-3 rounded-lg p-3 lg:flex-row lg:items-center lg:justify-between">
-      <div className="no-scrollbar flex gap-2 overflow-x-auto">
-        {TIME_RANGES.map((item) => (
-          <button
-            key={item.value}
-            onClick={() => onRange?.(item.value)}
-            className={`h-9 shrink-0 rounded-md px-3 text-sm transition ${
-              range === item.value ? "chip-active" : "chip-ghost"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+        <div className="no-scrollbar flex gap-2 overflow-x-auto">
+          {SOURCE_LOCALES.map((item) => (
+            <button
+              key={item.value}
+              onClick={() => onLocale?.(item.value)}
+              className={`h-9 shrink-0 rounded-md px-3 text-sm transition ${
+                locale === item.value ? "chip-active" : "chip-ghost"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="no-scrollbar flex gap-2 overflow-x-auto">
+          {TIME_RANGES.map((item) => (
+            <button
+              key={item.value}
+              onClick={() => onRange?.(item.value)}
+              className={`h-9 shrink-0 rounded-md px-3 text-sm transition ${
+                range === item.value ? "chip-active" : "chip-ghost"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">
         {onSearch ? (

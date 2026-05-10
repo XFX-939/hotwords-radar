@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
       source: searchParams.get("source") ?? undefined,
       sort: searchParams.get("sort") ?? "heat",
       search: searchParams.get("search") ?? undefined,
+      locale: searchParams.get("locale") ?? undefined,
       limit: 200
     });
     return ok(data);

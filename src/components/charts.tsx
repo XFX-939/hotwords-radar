@@ -6,11 +6,11 @@ import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { categoryColor, chartThemeColors, formatChineseTime } from "@/lib/format";
-import type { KeywordListItem } from "@/lib/types";
+import type { KeywordListItem, SourceLocale } from "@/lib/types";
 
 const ReactECharts = dynamic(async () => (await import("echarts-for-react")).default, { ssr: false });
 
-export function WordCloudChart({ keywords }: { keywords: KeywordListItem[] }) {
+export function WordCloudChart({ keywords, locale = "all" }: { keywords: KeywordListItem[]; locale?: SourceLocale }) {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
   const mode = resolvedTheme === "dark" ? "dark" : "light";
@@ -29,7 +29,7 @@ export function WordCloudChart({ keywords }: { keywords: KeywordListItem[] }) {
             key={keyword.id}
             type="button"
             title={`${keyword.word} · ${keyword.category} · 热度 ${Math.round(keyword.score)}`}
-            onClick={() => router.push(`/word/${encodeURIComponent(keyword.word)}`)}
+            onClick={() => router.push(`/word/${encodeURIComponent(keyword.word)}?locale=${locale}`)}
             className="word-cloud-token"
             style={{
               color: categoryColor(keyword.category, mode),
@@ -79,7 +79,7 @@ export function TrendChart({
       },
       series: [
         {
-          name: "热度分",
+          name: "综合热度分",
           type: "line",
           smooth: true,
           symbolSize: 8,
@@ -109,12 +109,14 @@ export function TrendChart({
 }
 
 export function RelationGraph({
-  data
+  data,
+  locale = "all"
 }: {
   data: {
     nodes: Array<{ id: string; name: string; category: string; value: number }>;
     links: Array<{ source: string; target: string; value: number }>;
   };
+  locale?: SourceLocale;
 }) {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
@@ -191,7 +193,7 @@ export function RelationGraph({
       onEvents={{
         click: (params: { dataType?: string; name?: string }) => {
           if (params.dataType === "node" && params.name) {
-            router.push(`/word/${encodeURIComponent(params.name)}`);
+            router.push(`/word/${encodeURIComponent(params.name)}?locale=${locale}`);
           }
         }
       }}

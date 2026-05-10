@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { Check, Clipboard, ImageDown } from "lucide-react";
+import { SourceLocaleToggle } from "@/components/source-locale-toggle";
 import { EmptyState, ErrorState, Panel, SectionTitle, SkeletonBlock } from "@/components/ui";
 import { formatChineseDate, formatChineseTime } from "@/lib/format";
+import type { SourceLocale } from "@/lib/types";
 import { useApi } from "@/hooks/use-api";
 
 interface DailyResponse {
@@ -15,7 +17,8 @@ interface DailyResponse {
 }
 
 export default function DailyPage() {
-  const daily = useApi<DailyResponse>("/api/daily");
+  const [locale, setLocale] = useState<SourceLocale>("all");
+  const daily = useApi<DailyResponse>(`/api/daily?locale=${locale}`);
   const [copied, setCopied] = useState(false);
 
   async function copyMarkdown() {
@@ -29,10 +32,11 @@ export default function DailyPage() {
     <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
       <Panel>
         <SectionTitle
-          title={daily.data?.title ?? "AI 热点日报"}
+          title={daily.data?.title ?? "热点日报"}
           eyebrow="Daily Report"
           action={
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              <SourceLocaleToggle value={locale} onChange={setLocale} />
               <button
                 onClick={copyMarkdown}
                 className="btn-primary inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm"

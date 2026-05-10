@@ -8,11 +8,28 @@ import { FilterBar } from "@/components/filters";
 import { CompactRanking, KeywordTable } from "@/components/keyword-table";
 import { EmptyState, ErrorState, Metric, Panel, SectionTitle, SkeletonBlock } from "@/components/ui";
 import { formatChineseTime } from "@/lib/format";
-import type { KeywordListItem } from "@/lib/types";
+import type { KeywordListItem, SourceLocale } from "@/lib/types";
 import { useApi } from "@/hooks/use-api";
 
 interface SourceResponse {
-  sources: Array<{ id: string; name: string; status: string; type: string; lastFetchedAt: string | null }>;
+  stats: {
+    enabledSourceCount: number;
+    enabledZhSourceCount: number;
+    enabledEnSourceCount: number;
+    rawItemCount: number;
+    keywordCount: number;
+    lastFetchedAt: string | null;
+    hasRealData: boolean;
+    fallbackMode: boolean;
+  };
+  sources: Array<{
+    id: string;
+    name: string;
+    lastStatus: string;
+    type: string;
+    locale: string;
+    lastFetchedAt: string | null;
+  }>;
 }
 
 interface DailyResponse {
@@ -24,16 +41,17 @@ interface DailyResponse {
 
 export default function HomePage() {
   const [range, setRange] = useState("24h");
+  const [locale, setLocale] = useState<SourceLocale>("all");
   const [category, setCategory] = useState("全部");
   const [source, setSource] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
-  const query = `/api/keywords?range=${range}&category=${encodeURIComponent(category)}&source=${source}&sort=heat&limit=80`;
+  const query = `/api/keywords?range=${range}&category=${encodeURIComponent(category)}&source=${source}&sort=heat&limit=80&locale=${locale}`;
   const keywords = useApi<KeywordListItem[]>(query);
-  const sources = useApi<SourceResponse>("/api/sources");
-  const daily = useApi<DailyResponse>("/api/daily");
+  const sources = useApi<SourceResponse>(`/api/sources?locale=${locale}`);
+  const daily = useApi<DailyResponse>(`/api/daily?locale=${locale}`);
   const focusWord = keywords.data?.[0]?.word;
   const trend = useApi<Array<{ time: string; score: number }>>(
-    focusWord ? `/api/keywords/${encodeURIComponent(focusWord)}/trend` : null
+    focusWord ? `/api/keywords/${encodeURIComponent(focusWord)}/trend?locale=${locale}` : null
   );
 
   const rising = useMemo(
@@ -51,11 +69,20 @@ export default function HomePage() {
   async function refreshAll() {
     setRefreshing(true);
     try {
-      await fetch("/api/refresh", { method: "POST" });
+      const response = await fetch("/api/jobs/ingest-hotwords", { method: "POST" });
+      if (!response.ok) {
+        const json = await response.json().catch(() => null);
+        throw new Error(json?.error ?? "数据更新失败");
+      }
       await Promise.all([keywords.refetch(), sources.refetch(), daily.refetch(), trend.refetch()]);
     } finally {
       setRefreshing(false);
     }
+  }
+
+  function changeLocale(value: string) {
+    setLocale(value as SourceLocale);
+    setSource("all");
   }
 
   const renderRefreshAction = () => (
@@ -68,14 +95,29 @@ export default function HomePage() {
   return (
     <div>
       <FilterBar
+        locale={locale}
         range={range}
         category={category}
         source={source}
         sources={sources.data?.sources ?? []}
+        onLocale={changeLocale}
         onRange={setRange}
         onCategory={setCategory}
         onSource={setSource}
       />
+
+      <section className="mb-4 grid gap-3 md:grid-cols-4">
+        <Metric label="最近更新时间" value={formatChineseTime(sources.data?.stats.lastFetchedAt)} hint="后台任务写库" />
+        <Metric label="启用数据源" value={sources.data?.stats.enabledSourceCount ?? "-"} hint={locale === "zh" ? "中文公开源" : locale === "en" ? "英文公开源" : "公开 API / RSS"} />
+        <Metric label="原始内容" value={sources.data?.stats.rawItemCount ?? "-"} hint="RawItem" />
+        <Metric label="热词数量" value={sources.data?.stats.keywordCount ?? "-"} hint="Keyword" />
+      </section>
+
+      {sources.data && !sources.data.stats.hasRealData ? (
+        <div className="status-risk mb-4 rounded-lg border px-4 py-3 text-sm">
+          暂无真实公开数据，请先运行数据更新任务。系统不会把 mock 数据伪装成真实热点。
+        </div>
+      ) : null}
 
       <section className="grid gap-4 lg:grid-cols-[0.95fr_1.6fr_0.95fr]">
         <Panel className="min-h-[380px] lg:min-h-[460px]">
@@ -92,7 +134,7 @@ export default function HomePage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Metric label="热词总量" value={keywords.data?.length ?? "-"} hint="数据库读取" />
-                <Metric label="数据源" value={sources.data?.sources.length ?? "-"} hint="mock pipeline" />
+                <Metric label="数据源" value={sources.data?.stats.enabledSourceCount ?? "-"} hint="合规公开源" />
               </div>
               <p className="text-muted text-xs">最近生成：{formatChineseTime(daily.data.updatedAt)}</p>
             </div>
@@ -105,7 +147,9 @@ export default function HomePage() {
           <div className="mb-2 flex items-center justify-between px-1">
             <div>
               <p className="eyebrow text-xs uppercase tracking-[0.2em]">Word Cloud</p>
-              <h1 className="text-primary mt-1 text-2xl font-semibold">今日互联网在关注什么</h1>
+              <h1 className="text-primary mt-1 text-2xl font-semibold">
+                {locale === "zh" ? "中文公开数据源在关注什么" : locale === "en" ? "英文公开数据源在关注什么" : "公开数据源在关注什么"}
+              </h1>
             </div>
             <Link href="/trending" className="btn-secondary hidden items-center gap-1 rounded-md px-3 py-2 text-sm sm:flex">
               全部榜单 <ArrowUpRight size={15} />
@@ -116,7 +160,7 @@ export default function HomePage() {
           ) : keywords.error ? (
             <ErrorState message={keywords.error} onRetry={keywords.refetch} />
           ) : keywords.data?.length ? (
-            <WordCloudChart keywords={keywords.data} />
+            <WordCloudChart keywords={keywords.data} locale={locale} />
           ) : (
             <EmptyState title="词云暂无数据" description="数据库里还没有可展示的热词。" action={renderRefreshAction()} />
           )}
@@ -171,11 +215,15 @@ export default function HomePage() {
                       <Database size={15} className="text-[color:var(--muted-soft)]" />
                       {item.name}
                     </div>
-                    <p className="text-muted mt-1 text-xs">{item.type} · {formatChineseTime(item.lastFetchedAt)}</p>
+              <p className="text-muted mt-1 text-xs">{item.type} · {formatChineseTime(item.lastFetchedAt)}</p>
                   </div>
-                  <span className="status-success inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs">
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs ${
+                      item.lastStatus === "failed" ? "status-risk" : item.lastStatus === "empty" ? "status-neutral" : "status-success"
+                    }`}
+                  >
                     <RadioTower size={12} />
-                    {item.status}
+                    {item.lastStatus}
                   </span>
                 </div>
               ))}

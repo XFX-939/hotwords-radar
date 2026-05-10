@@ -1,9 +1,10 @@
 import { fail, ok } from "@/lib/http";
 import { getDailyReport } from "@/lib/queries";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    return ok(await getDailyReport());
+    const { searchParams } = new URL(request.url);
+    return ok(await getDailyReport(searchParams.get("locale")));
   } catch (error) {
     return fail(error);
   }

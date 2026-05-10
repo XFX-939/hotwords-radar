@@ -1,0 +1,20 @@
+{
+  "crons": [
+    {
+      "path": "/api/jobs/ingest-hotwords",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/jobs/ingest-hotwords",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/jobs/ingest-hotwords",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/jobs/ingest-hotwords",
+      "schedule": "0 12 * * *"
+    }
+  ]
+}

@@ -1,7 +1,6 @@
 import { getPrisma } from "./db";
 import { buildKeywordExplanation, buildCreationSuggestions, normalizeWord } from "./pipeline";
-import { runRefreshPipeline } from "./refresh";
-import type { KeywordListItem, TimeRange, TrendDirection, Sentiment } from "./types";
+import type { KeywordListItem, SourceLocale, TimeRange, TrendDirection, Sentiment } from "./types";
 
 interface KeywordQuery {
   range?: string;
@@ -10,24 +9,19 @@ interface KeywordQuery {
   sort?: string;
   search?: string;
   limit?: number;
-}
-
-export async function ensureInitialData() {
-  const prisma = getPrisma();
-  const count = await prisma.keyword.count();
-  if (count === 0) {
-    await runRefreshPipeline({ trigger: "dev-initial-seed" });
-  }
+  locale?: string;
 }
 
 export async function getKeywordList(query: KeywordQuery = {}): Promise<KeywordListItem[]> {
-  await ensureInitialData();
   const prisma = getPrisma();
   const since = getRangeStart((query.range as TimeRange) || "24h");
   const sourceId = query.source && query.source !== "all" ? query.source : undefined;
+  const locale = normalizeLocale(query.locale);
 
   const keywords = await prisma.keyword.findMany({
     where: {
+      score: { gt: 0 },
+      locale,
       lastSeenAt: { gte: since },
       ...(query.category && query.category !== "全部" ? { category: query.category } : {}),
       ...(query.search
@@ -49,7 +43,7 @@ export async function getKeywordList(query: KeywordQuery = {}): Promise<KeywordL
 
   let sourceFiltered = keywords;
   if (sourceId) {
-    const checks = await Promise.all(keywords.map((keyword) => keywordAppearsInSource(keyword.word, sourceId)));
+    const checks = await Promise.all(keywords.map((keyword) => keywordAppearsInSource(keyword.id, sourceId)));
     sourceFiltered = keywords.filter((_, index) => checks[index]);
   }
 
@@ -67,6 +61,7 @@ export async function getKeywordList(query: KeywordQuery = {}): Promise<KeywordL
         score: keyword.score,
         trend: keyword.trend as TrendDirection,
         sentiment: keyword.sentiment as Sentiment,
+        locale: keyword.locale as SourceLocale,
         sourceCount,
         itemCount,
         firstSeenAt: keyword.firstSeenAt.toISOString(),
@@ -79,47 +74,79 @@ export async function getKeywordList(query: KeywordQuery = {}): Promise<KeywordL
   return sorted.slice(0, query.limit ?? 100).map((item, index) => ({ ...item, rank: index + 1 }));
 }
 
-export async function getSources() {
-  await ensureInitialData();
+export async function getSources(localeParam?: string | null) {
   const prisma = getPrisma();
-  const [sources, logs] = await Promise.all([
-    prisma.source.findMany({ orderBy: [{ enabled: "desc" }, { name: "asc" }] }),
-    prisma.fetchLog.findMany({ orderBy: { startedAt: "desc" }, take: 8 })
+  const locale = normalizeLocale(localeParam);
+  const sourceWhere = locale === "all" ? {} : { locale };
+  const rawItemWhere = locale === "all" ? {} : { source: { is: { locale } } };
+  const [sources, allSources, logs, rawItemCount, keywordCount] = await Promise.all([
+    prisma.source.findMany({ where: sourceWhere, orderBy: [{ enabled: "desc" }, { name: "asc" }] }),
+    prisma.source.findMany({ select: { enabled: true, locale: true } }),
+    prisma.fetchLog.findMany({
+      where: locale === "all" ? {} : { source: { is: { locale } } },
+      include: { source: true },
+      orderBy: { startedAt: "desc" },
+      take: 12
+    }),
+    prisma.rawItem.count({ where: rawItemWhere }),
+    prisma.keyword.count({ where: { locale } })
   ]);
+  const lastFetchedAt = sources
+    .map((source) => source.lastFetchedAt)
+    .filter((value): value is Date => Boolean(value))
+    .sort((a, b) => b.getTime() - a.getTime())[0];
 
   return {
+    stats: {
+      enabledSourceCount: sources.filter((source) => source.enabled).length,
+      enabledZhSourceCount: allSources.filter((source) => source.enabled && source.locale === "zh").length,
+      enabledEnSourceCount: allSources.filter((source) => source.enabled && source.locale === "en").length,
+      rawItemCount,
+      keywordCount,
+      lastFetchedAt: lastFetchedAt?.toISOString() ?? null,
+      hasRealData: rawItemCount > 0 && keywordCount > 0,
+      fallbackMode: false
+    },
     sources: sources.map((source) => ({
       id: source.id,
+      key: source.key,
       name: source.name,
       type: source.type,
-      url: source.url,
+      endpoint: source.endpoint,
+      locale: source.locale,
       enabled: source.enabled,
+      sourceWeight: source.sourceWeight,
+      fetchIntervalMinutes: source.fetchIntervalMinutes,
       lastFetchedAt: source.lastFetchedAt?.toISOString() ?? null,
-      status: source.status,
+      lastStatus: source.lastStatus,
+      lastError: source.lastError,
       createdAt: source.createdAt.toISOString(),
       updatedAt: source.updatedAt.toISOString()
     })),
     logs: logs.map((log) => ({
       id: log.id,
+      sourceId: log.sourceId,
+      sourceName: log.source.name,
+      sourceKey: log.source.key,
       startedAt: log.startedAt.toISOString(),
       finishedAt: log.finishedAt?.toISOString() ?? null,
       status: log.status,
-      successCount: log.successCount,
-      failureCount: log.failureCount,
       durationMs: log.durationMs,
-      message: log.message,
-      error: log.error
+      itemCount: log.itemCount,
+      newItemCount: log.newItemCount,
+      errorMessage: log.errorMessage
     }))
   };
 }
 
-export async function getKeywordDetail(keywordParam: string) {
-  await ensureInitialData();
+export async function getKeywordDetail(keywordParam: string, localeParam?: string | null) {
   const prisma = getPrisma();
   const decoded = decodeURIComponent(keywordParam);
   const normalized = normalizeWord(decoded);
+  const locale = normalizeLocale(localeParam);
   const keyword = await prisma.keyword.findFirst({
     where: {
+      locale,
       OR: [{ normalizedWord: normalized }, { word: decoded }]
     },
     include: {
@@ -147,12 +174,16 @@ export async function getKeywordDetail(keywordParam: string) {
     ...keyword.relationsA.map((relation) => relation.keywordB.word),
     ...keyword.relationsB.map((relation) => relation.keywordA.word)
   ].slice(0, 12);
-  const rawItems = await prisma.rawItem.findMany({
+  const mentions = await prisma.keywordMention.findMany({
     where: {
-      OR: [{ title: { contains: keyword.word } }, { summary: { contains: keyword.word } }]
+      keywordId: keyword.id
     },
-    include: { source: true },
-    orderBy: { fetchedAt: "desc" },
+    include: {
+      rawItem: {
+        include: { source: true }
+      }
+    },
+    orderBy: [{ weight: "desc" }, { createdAt: "desc" }],
     take: 16
   });
   const reportKeyword = {
@@ -177,27 +208,28 @@ export async function getKeywordDetail(keywordParam: string) {
     relatedKeywords: related,
     sentimentAnalysis: buildSentimentAnalysis(keyword.sentiment as Sentiment),
     creationSuggestions: buildCreationSuggestions(reportKeyword, related),
-    sources: rawItems.map((item) => ({
-      id: item.id,
-      sourceName: item.source.name,
-      sourceType: item.source.type,
-      title: item.title,
-      url: item.url,
-      summary: item.summary,
-      rank: item.rank,
-      hotValue: item.hotValue,
-      publishedAt: item.publishedAt?.toISOString() ?? null,
-      fetchedAt: item.fetchedAt.toISOString()
+    sources: mentions.map((mention) => ({
+      id: mention.rawItem.id,
+      sourceName: mention.rawItem.source.name,
+      sourceType: mention.rawItem.source.type,
+      sourceLocale: mention.rawItem.source.locale,
+      title: mention.rawItem.title,
+      url: mention.rawItem.url,
+      summary: mention.rawItem.summary,
+      author: mention.rawItem.author,
+      weight: mention.weight,
+      publishedAt: mention.rawItem.publishedAt?.toISOString() ?? null,
+      fetchedAt: mention.rawItem.fetchedAt.toISOString()
     }))
   };
 }
 
-export async function getKeywordTrend(keywordParam: string) {
-  await ensureInitialData();
+export async function getKeywordTrend(keywordParam: string, localeParam?: string | null) {
   const prisma = getPrisma();
   const normalized = normalizeWord(decodeURIComponent(keywordParam));
+  const locale = normalizeLocale(localeParam);
   const keyword = await prisma.keyword.findFirst({
-    where: { normalizedWord: normalized },
+    where: { normalizedWord: normalized, locale },
     include: {
       snapshots: {
         orderBy: { snapshotTime: "asc" },
@@ -216,10 +248,11 @@ export async function getKeywordTrend(keywordParam: string) {
   }));
 }
 
-export async function getRelations() {
-  await ensureInitialData();
+export async function getRelations(localeParam?: string | null) {
   const prisma = getPrisma();
+  const locale = normalizeLocale(localeParam);
   const keywords = await prisma.keyword.findMany({
+    where: { score: { gt: 0 }, locale },
     orderBy: { score: "desc" },
     take: 45
   });
@@ -252,10 +285,11 @@ export async function getRelations() {
   };
 }
 
-export async function getDailyReport() {
-  await ensureInitialData();
+export async function getDailyReport(localeParam?: string | null) {
   const prisma = getPrisma();
+  const locale = normalizeLocale(localeParam);
   const report = await prisma.dailyReport.findFirst({
+    where: { locale },
     orderBy: { date: "desc" }
   });
   return report
@@ -265,10 +299,16 @@ export async function getDailyReport() {
         title: report.title,
         summary: report.summary,
         contentMarkdown: report.contentMarkdown,
+        locale: report.locale,
         createdAt: report.createdAt.toISOString(),
         updatedAt: report.updatedAt.toISOString()
       }
     : null;
+}
+
+function normalizeLocale(value?: string | null): SourceLocale {
+  if (value === "zh" || value === "en") return value;
+  return "all";
 }
 
 function getRangeStart(range: TimeRange) {
@@ -302,12 +342,12 @@ function sortKeywords(items: KeywordListItem[], sort = "heat") {
   return copy.sort((a, b) => b.score - a.score);
 }
 
-async function keywordAppearsInSource(word: string, sourceId: string) {
+async function keywordAppearsInSource(keywordId: string, sourceId: string) {
   const prisma = getPrisma();
-  const count = await prisma.rawItem.count({
+  const count = await prisma.keywordMention.count({
     where: {
-      sourceId,
-      OR: [{ title: { contains: word } }, { summary: { contains: word } }]
+      keywordId,
+      sourceId
     }
   });
   return count > 0;

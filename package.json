@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/*.test.js",
     "db:generate": "prisma generate",
+    "db:migrate": "node scripts/create-sqlite-db.mjs && prisma migrate deploy",
     "db:push": "node scripts/create-sqlite-db.mjs && prisma db push",
     "db:seed": "tsc -p tsconfig.scripts.json && node .script-dist/prisma/seed.js",
     "refresh": "tsc -p tsconfig.scripts.json && node .script-dist/scripts/refresh.js",
@@ -25,7 +26,8 @@
     "next-themes": "^0.4.6",
     "node-cron": "^3.0.3",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "rss-parser": "^3.13.0"
   },
   "devDependencies": {
     "@next/swc-wasm-nodejs": "^15.5.18",

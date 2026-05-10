@@ -4,8 +4,12 @@ import { fileURLToPath } from "node:url";
 const command = process.argv[2] ?? "dev";
 const args = process.argv.slice(3);
 const nextCli = fileURLToPath(new URL("../node_modules/next/dist/bin/next", import.meta.url));
+const normalizedArgs =
+  command === "dev" && !args.some((arg) => arg === "-H" || arg === "--hostname")
+    ? [...args, "-H", process.env.NEXT_HOST ?? "127.0.0.1"]
+    : args;
 
-const child = spawn(process.execPath, [nextCli, command, ...args], {
+const child = spawn(process.execPath, [nextCli, command, ...normalizedArgs], {
   stdio: "inherit",
   env: {
     ...process.env,
